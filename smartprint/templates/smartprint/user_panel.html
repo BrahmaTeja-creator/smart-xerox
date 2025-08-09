@@ -1,3 +1,4 @@
+{% load custom_filters %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -16,37 +17,567 @@
             color: white;
             padding: 15px;
             font-size: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        header .welcome-text {
+            flex-grow: 1;
+            text-align: center;
         }
         main {
             padding: 20px;
+            max-width: 800px; /* Increased max-width for table */
+            margin: 20px auto;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
-        p {
-            font-size: 18px;
-            color: #333;
+        .form-group {
+            margin-bottom: 15px;
+            text-align: left;
         }
-        a {
-            display: inline-block;
-            margin: 10px;
-            padding: 12px 20px;
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-control {
+            width: calc(100% - 22px); /* Account for padding and border */
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box; /* Include padding and border in the element's total width and height */
+        }
+        .form-check-input {
+            margin-right: 5px;
+        }
+        .errorlist {
+            color: red;
+            list-style-type: none;
+            padding: 0;
+            margin: 0 0 10px 0;
+            text-align: left;
+        }
+        button {
+            padding: 10px 20px;
             background-color: #28a745;
             color: white;
-            text-decoration: none;
+            border: none;
             border-radius: 5px;
-            font-size: 16px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-top: 20px;
         }
-        a:hover {
+        button:hover {
             background-color: #218838;
+        }
+        .logout-link {
+            color: white;
+            text-decoration: none;
+            padding: 5px 10px;
+            border: 1px solid white;
+            border-radius: 5px;
+            margin-left: 20px;
+            font-size: 0.8em; /* Smaller for logout */
+        }
+        .logout-link:hover {
+            background-color: #0056b3;
+        }
+        /* Table styles for user's jobs */
+        .user-orders-table { /* Changed class name to reflect orders */
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .user-orders-table th, .user-orders-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            font-size: 0.9em;
+        }
+        .user-orders-table th {
+            background-color: #5cb85c; /* A different green for user table header */
+            color: white;
+        }
+        .user-orders-table tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .user-orders-table tr:hover {
+            background-color: #e6e6e6;
+        }
+        /* Nested table for order items */
+        .order-items-table { width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 0.85em;}
+        .order-items-table th, .order-items-table td { border: 1px solid #f0f0f0; padding: 6px; text-align: left; }
+        .order-items-table th { background-color: #777; color: white; font-weight: normal; }
+        .order-items-table tr:nth-child(even) { background-color: #fafafa; }
+
+
+        .status-pending { color: orange; font-weight: bold; }
+        .status-approved { color: blue; font-weight: bold; }
+        .status-in_progress { color: purple; font-weight: bold; }
+        .status-completed { color: green; font-weight: bold; }
+        .status-rejected { color: red; font-weight: bold; }
+
+        /* Dynamic Cost Display */
+        #estimated-cost-display {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #007bff;
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px dashed #007bff;
+            border-radius: 5px;
+            background-color: #e7f3ff;
+        }
+
+        /* Formset specific styles */
+        .item-form {
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            background-color: #fcfcfc;
+            position: relative; /* For remove button positioning */
+        }
+        .remove-item-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 0.8em;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+        .remove-item-btn:hover {
+            background-color: #c82333;
+        }
+        .add-item-btn {
+            background-color: #007bff;
+            margin-top: 10px;
+            margin-bottom: 20px;
+        }
+        .add-item-btn:hover {
+            background-color: #0056b3;
         }
     </style>
 </head>
 <body>
     <header>
-        Welcome, Student!
+        <span class="welcome-text">Welcome, {{ user.username }}!</span>
+        <a href="{% url 'logout' %}" class="logout-link">Logout</a>
     </header>
     <main>
-        <p>This is your personalized dashboard. You can submit new print requests here.</p>
-        <a href="#">Submit a New Print Request</a>
-        <a href="#">View My Requests</a>
+        <h2>Submit a New Print Request</h2>
+        <form id="print-order-form" method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            
+            {# Management form for the formset #}
+            {{ formset.management_form }}
+
+            <div id="form-container">
+                {% for form in formset %}
+                    <div class="item-form" id="item-form-{{ forloop.counter0 }}">
+                        <h3>Document #{{ forloop.counter }}</h3>
+                        {% if form.non_field_errors %}
+                            <ul class="errorlist">
+                                {% for error in form.non_field_errors %}
+                                    <li>{{ error }}</li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+
+                        <div class="form-group">
+                            {{ form.predefined_document.label_tag }}
+                            {{ form.predefined_document|add_class:"form-control" }}
+                            {% if form.predefined_document.help_text %}
+                                <small class="form-text text-muted">{{ form.predefined_document.help_text }}</small>
+                            {% endif %}
+                            {% if form.predefined_document.errors %}
+                                <ul class="errorlist">{% for error in form.predefined_document.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                            {% endif %}
+                        </div>
+
+                        <p style="text-align: center; margin: 15px 0;">-- OR --</p>
+
+                        <div class="form-group">
+                            {{ form.document.label_tag }}
+                            {{ form.document|add_class:"form-control" }}
+                            {% if form.document.help_text %}
+                                <small class="form-text text-muted">{{ form.document.help_text }}</small>
+                            {% endif %}
+                            {% if form.document.errors %}
+                                <ul class="errorlist">{% for error in form.document.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.total_pages.label_tag }}
+                            {{ form.total_pages|add_class:"form-control" }}
+                            {% if form.total_pages.help_text %}
+                                <small class="form-text text-muted">{{ form.total_pages.help_text }}</small>
+                            {% endif %}
+                            {% if form.total_pages.errors %}
+                                <ul class="errorlist">{% for error in form.total_pages.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.num_copies.label_tag }}
+                            {{ form.num_copies|add_class:"form-control" }}
+                            {% if form.num_copies.errors %}
+                                <ul class="errorlist">{% for error in form.num_copies.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.is_color.label_tag }}
+                            {{ form.is_color }}
+                            {% if form.is_color.errors %}
+                                <ul class="errorlist">{% for error in form.is_color.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.color_pages_info.label_tag }}
+                            {{ form.color_pages_info|add_class:"form-control" }}
+                            {% if form.color_pages_info.help_text %}
+                                <small class="form-text text-muted">{{ form.color_pages_info.help_text }}</small>
+                            {% endif %}
+                            {% if form.color_pages_info.errors %}
+                                <ul class="errorlist">{% for error in form.color_pages_info.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group" style="text-align: center;">
+                            {{ form.needs_binding }} {{ form.needs_binding.label_tag }}
+                            {% if form.needs_binding.errors %}
+                                <ul class="errorlist">{% for error in form.needs_binding.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                            {% endif %}
+                        </div>
+
+                        {# Hidden field for deletion #}
+                        {% if formset.can_delete %}
+                            {{ form.DELETE }}
+                        {% endif %}
+                        
+                        {% if forloop.counter0 > 0 %} {# Don't show remove button for the first form #}
+                            <button type="button" class="remove-item-btn" data-form-id="item-form-{{ forloop.counter0 }}">Remove Item</button>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+
+            <button type="button" id="add-item-btn" class="add-item-btn">Add Another Document</button>
+
+            {# Total Estimated Cost for the entire order #}
+            <div id="estimated-cost-display">
+                Total Estimated Cost: ₹ 0.00
+            </div>
+
+            <button type="submit">Submit Print Order</button>
+        </form>
+
+        <h3 style="margin-top: 40px;">My Recent Print Orders</h3> {# Changed to Orders #}
+        {% if user_print_orders %}
+        <table class="user-orders-table">
+            <thead>
+                <tr>
+                    <th>Order ID</th>
+                    <th>Total Cost</th>
+                    <th>Status</th>
+                    <th>Requested At</th>
+                    <th>Items</th> {# New column for items #}
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in user_print_orders %}
+                <tr>
+                    <td>{{ order.id }}</td>
+                    <td>₹ {{ order.total_estimated_cost }}</td>
+                    <td class="status-{{ order.status|lower }}">
+                        {{ order.get_status_display }}
+                    </td>
+                    <td>{{ order.requested_at|date:"M d, Y H:i" }}</td>
+                    <td>
+                        <table class="order-items-table">
+                            <thead>
+                                <tr>
+                                    <th>Document</th>
+                                    <th>Pages</th>
+                                    <th>Copies</th>
+                                    <th>Type</th>
+                                    <th>Binding</th>
+                                    <th>Item Cost</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in order.items.all %} {# Iterate through related PrintJob items #}
+                                <tr>
+                                    <td>
+                                        {{ item.document.name|split:"/"|last }}
+                                        {% if item.total_pages %} ({{ item.total_pages }} pages){% endif %}
+                                    </td>
+                                    <td>{{ item.num_copies }}</td>
+                                    <td>
+                                        {% if item.is_color %}Color{% else %}B&W{% endif %}
+                                        {% if item.color_pages_info %} ({{ item.color_pages_info }}){% endif %}
+                                    </td>
+                                    <td>{% if item.needs_binding %}Yes{% else %}No{% endif %}</td>
+                                    <td>₹ {{ item.item_estimated_cost }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="text-align: center; color: #666; font-style: italic;">You have no print orders yet.</p>
+        {% endif %}
+
     </main>
+    <script>
+        // Get references to form elements
+        const formContainer = document.getElementById('form-container');
+        const addItemBtn = document.getElementById('add-item-btn');
+        // Correctly select the TOTAL_FORMS input field from the management form
+        const totalFormsInput = document.querySelector('input[name="items-TOTAL_FORMS"]'); 
+        const estimatedCostDisplay = document.getElementById('estimated-cost-display');
+        const printOrderForm = document.getElementById('print-order-form'); // The main form
+
+        // Function to get CSRF token from the page
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        const csrftoken = getCookie('csrftoken');
+
+        // Store the URL for AJAX calls in a JS variable, processed by Django template engine
+        const calculateCostAjaxUrl = "{% url 'calculate_cost_ajax' %}";
+        const getPageCountAjaxUrl = "{% url 'get_page_count_ajax' %}";
+
+
+        // Function to clone a form and update its IDs/names
+        function addForm(event) {
+            event.preventDefault(); // Prevent default button behavior
+
+            // Safely check if totalFormsInput exists
+            if (!totalFormsInput) {
+                console.error("Error: Management form input 'items-TOTAL_FORMS' not found. Cannot add new form.");
+                return; // Exit function if element is missing
+            }
+
+            const currentForms = formContainer.querySelectorAll('.item-form');
+            const lastForm = currentForms[currentForms.length - 1];
+            const newForm = lastForm.cloneNode(true); // Deep clone
+
+            let formIdx = parseInt(totalFormsInput.value); // Get current total forms
+
+            // Update IDs and names for the new form's elements
+            newForm.id = `item-form-${formIdx}`;
+            newForm.querySelector('h3').textContent = `Document #${formIdx + 1}`;
+
+            // Update all input/select/textarea IDs and names
+            newForm.querySelectorAll('[id^="id_items-"], [name^="items-"]').forEach(element => {
+                // Update ID
+                if (element.id) {
+                    element.id = element.id.replace(/items-\d+-/, `items-${formIdx}-`);
+                }
+                // Update Name
+                if (element.name) {
+                    element.name = element.name.replace(/items-\d+-/, `items-${formIdx}-`);
+                }
+                // Clear values for new form and set defaults for numbers
+                if (element.type === 'text' || element.tagName === 'TEXTAREA' || element.tagName === 'SELECT') {
+                    element.value = '';
+                } else if (element.type === 'number') {
+                    // Set default for number inputs
+                    if (element.name.includes('num_copies')) {
+                        element.value = '1';
+                    } else if (element.name.includes('total_pages')) {
+                        element.value = '0';
+                    } else {
+                        element.value = '';
+                    }
+                } else if (element.type === 'checkbox') {
+                    element.checked = false;
+                }
+            });
+
+            // Add remove button if not present (for cloned forms)
+            let removeBtn = newForm.querySelector('.remove-item-btn');
+            if (!removeBtn) {
+                removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'remove-item-btn';
+                removeBtn.textContent = 'Remove Item';
+                newForm.appendChild(removeBtn);
+            }
+            removeBtn.setAttribute('data-form-id', `item-form-${formIdx}`);
+            removeBtn.addEventListener('click', removeForm);
+
+            // Append the new form
+            formContainer.appendChild(newForm);
+
+            // Update TOTAL_FORMS in management form
+            totalFormsInput.value = formIdx + 1;
+
+            // Re-attach event listeners to all relevant fields in the new form
+            attachEventListenersToForm(newForm);
+
+            // Recalculate cost after adding a new form
+            updateEstimatedCost();
+        }
+
+        // Function to remove a form
+        function removeForm(event) {
+            event.preventDefault();
+            const formToRemoveId = event.target.dataset.formId;
+            const formToRemove = document.getElementById(formToRemoveId);
+            if (formToRemove) {
+                // Mark the DELETE checkbox for this form
+                const deleteCheckbox = formToRemove.querySelector('input[name$="-DELETE"]');
+                if (deleteCheckbox) {
+                    deleteCheckbox.checked = true;
+                }
+                formToRemove.style.display = 'none'; // Hide it
+                updateEstimatedCost(); // Recalculate cost after removal
+            }
+        }
+
+        // NEW: Function to auto-detect pages from uploaded document
+        function autoDetectPages(event) {
+            const documentUploadInput = event.target; // The specific file input that changed
+            const formElement = documentUploadInput.closest('.item-form'); // The parent form for this item
+            const totalPagesInput = formElement.querySelector('[id$="-total_pages"]'); // Get total pages input within this form
+
+            if (documentUploadInput.files.length > 0) {
+                const file = documentUploadInput.files[0];
+                const formData = new FormData();
+                formData.append('document', file);
+                formData.append('csrfmiddlewaretoken', csrftoken);
+
+                // Disable total pages input while detecting
+                totalPagesInput.value = 'Detecting...';
+                totalPagesInput.disabled = true;
+
+                fetch(getPageCountAjaxUrl, { // Use the defined URL variable
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) { // Check for HTTP errors
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.total_pages !== undefined) {
+                        totalPagesInput.value = data.total_pages;
+                    } else if (data.error) {
+                        totalPagesInput.value = 'Error';
+                        console.error('Error detecting pages:', data.error);
+                    }
+                })
+                .catch(error => {
+                    totalPagesInput.value = 'Error';
+                    console.error('Network error or server issue for page detection:', error);
+                })
+                .finally(() => {
+                    totalPagesInput.disabled = false; // Re-enable input
+                    updateEstimatedCost(); // Recalculate cost after pages are detected
+                });
+            } else {
+                totalPagesInput.value = '0'; // Reset if no file selected
+                updateEstimatedCost();
+            }
+        }
+
+        // Function to attach event listeners to a single form's fields
+        function attachEventListenersToForm(formElement) {
+            const predefinedDocSelect = formElement.querySelector('[id$="-predefined_document"]');
+            const documentUploadInput = formElement.querySelector('[id$="-document"]');
+            const totalPagesInput = formElement.querySelector('[id$="-total_pages"]');
+            const numCopiesInput = formElement.querySelector('[id$="-num_copies"]');
+            const isColorCheckbox = formElement.querySelector('[id$="-is_color"]');
+            const needsBindingCheckbox = formElement.querySelector('[id$="-needs_binding"]');
+
+            if (predefinedDocSelect) predefinedDocSelect.addEventListener('change', updateEstimatedCost);
+            // Attach autoDetectPages to the document upload input
+            if (documentUploadInput) documentUploadInput.addEventListener('change', autoDetectPages); // NEW: Auto-detect pages
+            
+            if (totalPagesInput) totalPagesInput.addEventListener('input', updateEstimatedCost);
+            if (numCopiesInput) numCopiesInput.addEventListener('input', updateEstimatedCost); 
+            if (isColorCheckbox) isColorCheckbox.addEventListener('change', updateEstimatedCost);
+            if (needsBindingCheckbox) needsBindingCheckbox.addEventListener('change', updateEstimatedCost);
+        }
+
+        // Function to send AJAX request and update total order cost
+        function updateEstimatedCost() {
+            const formData = new FormData(printOrderForm); // Use the main form to get all data
+            formData.append('csrfmiddlewaretoken', csrftoken);
+
+            fetch(calculateCostAjaxUrl, { // Use the defined URL variable
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => {
+                if (!response.ok) { // Check for HTTP errors
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.estimated_cost) {
+                    estimatedCostDisplay.textContent = `Total Estimated Cost: ${data.estimated_cost}`;
+                } else if (data.error) {
+                    estimatedCostDisplay.textContent = `Error: ${data.error}`;
+                    console.error('Error calculating cost:', data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Network error or server issue:', error);
+                estimatedCostDisplay.textContent = 'Total Estimated Cost: Error';
+            });
+        }
+
+        // Attach event listeners to initial forms on page load
+        formContainer.querySelectorAll('.item-form').forEach(formElement => {
+            attachEventListenersToForm(formElement);
+            // Attach remove listener for existing remove buttons (if any, for pre-filled forms)
+            const removeBtn = formElement.querySelector('.remove-item-btn');
+            if (removeBtn) {
+                removeBtn.addEventListener('click', removeForm);
+            }
+        });
+
+        // Attach event listener to "Add Another Document" button
+        addItemBtn.addEventListener('click', addForm);
+
+        // Initial cost calculation when page loads
+        updateEstimatedCost();
+    </script>
 </body>
 </html>

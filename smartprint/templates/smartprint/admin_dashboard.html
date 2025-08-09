@@ -1,0 +1,163 @@
+{% load custom_filters %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Dashboard - SmartXerox</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f8f8f8; }
+        .dashboard-container { max-width: 1200px; margin: 20px auto; padding: 20px; background-color: #fff; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1 { color: #333; text-align: center; margin-bottom: 30px; }
+        h2 { color: #555; margin-top: 25px; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        
+        /* Card Styles */
+        .card-row { display: flex; justify-content: space-around; flex-wrap: wrap; margin-bottom: 30px; }
+        .card { 
+            flex: 1; 
+            min-width: 280px; 
+            margin: 10px; 
+            padding: 25px; 
+            background: linear-gradient(135deg, #e0e0e0, #f0f0f0); 
+            text-align: center; 
+            border-radius: 12px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            transition: transform 0.2s ease-in-out;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        .card h2 { font-size: 1.2em; margin-top: 0; color: #444; border-bottom: none; }
+        .card p { font-size: 2em; font-weight: bold; color: #007bff; margin: 5px 0; }
+        .card p.currency { font-size: 1.8em; }
+
+        /* Table Styles */
+        .order-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .order-table th, .order-table td { border: 1px solid #e0e0e0; padding: 12px; text-align: left; }
+        .order-table th { background-color: #4CAF50; color: white; font-weight: bold; text-transform: uppercase; }
+        .order-table tr:nth-child(even) { background-color: #f9f9f9; } 
+        .order-table tr:hover { background-color: #f1f1f1; } 
+
+        /* Nested table for job items */
+        .job-items-table { width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 0.9em;}
+        .job-items-table th, .job-items-table td { border: 1px solid #f0f0f0; padding: 8px; text-align: left; }
+        .job-items-table th { background-color: #6c757d; color: white; font-weight: normal; }
+        .job-items-table tr:nth-child(even) { background-color: #fafafa; }
+
+        /* Button Styles */
+        .btn-action {
+            display: inline-block;
+            padding: 8px 15px;
+            margin: 3px;
+            border-radius: 5px;
+            text-decoration: none;
+            color: white;
+            font-weight: bold;
+            transition: background-color 0.2s ease;
+        }
+        .btn-print { background-color: #007bff; }
+        .btn-print:hover { background-color: #0056b3; }
+        .btn-print-greyed { 
+            background-color: #cccccc !important;
+            cursor: not-allowed;
+        }
+        .btn-approve { background-color: #28a745; }
+        .btn-approve:hover { background-color: #218838; }
+        .btn-reject { background-color: #dc3545; }
+        .btn-reject:hover { background-color: #c82333; }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1>Welcome, Admin!</h1>
+        <div class="card-row">
+            <div class="card">
+                <h2>Total Orders Today</h2>
+                <p>{{ total_jobs_today }}</p>
+            </div>
+            <div class="card">
+                <h2>Earnings Today</h2>
+                <p class="currency">₹ {{ total_earnings_today }}</p>
+            </div>
+            <div class="card">
+                <h2>Pages Printed Today</h2>
+                <p>{{ total_pages_printed_today }}</p>
+            </div>
+        </div>
+
+        <h2>Pending Print Orders</h2>
+        {% if pending_orders %}
+        <table class="order-table">
+            <thead>
+                <tr>
+                    <th>Order ID</th>
+                    <th>User</th>
+                    <th>Requested At</th>
+                    <th>Total Cost</th>
+                    <th>Order Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in pending_orders %}
+                <tr>
+                    <td>{{ order.id }}</td>
+                    <td>{{ order.user.username }}</td>
+                    <td>{{ order.requested_at|date:"M d, Y H:i" }}</td>
+                    <td>₹ {{ order.total_estimated_cost }}</td>
+                    <td>
+                        <a href="{% url 'approve_order' order.id %}" class="btn-action btn-approve">Approve Order</a>
+                        <a href="{% url 'reject_order' order.id %}" class="btn-action btn-reject">Reject Order</a>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="5">
+                        <h3 style="margin-top: 10px; margin-bottom: 5px;">Order Items (Documents)</h3>
+                        <table class="job-items-table">
+                            <thead>
+                                <tr>
+                                    <th>Item ID</th>
+                                    <th>Document Name</th>
+                                    <th>Pages</th>
+                                    <th>Copies</th>
+                                    <th>Customizations</th>
+                                    <th>Item Cost</th>
+                                    <th>Item Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in order.items.all %} {# Iterate through related PrintJob items #}
+                                <tr>
+                                    <td>{{ item.id }}</td>
+                                    <td>
+                                        {{ item.document.name|split:"/"|last }}
+                                        {% if item.total_pages %} ({{ item.total_pages }} pages){% endif %}
+                                    </td>
+                                    <td>{{ item.num_copies }}</td>
+                                    <td>
+                                        Print Type: {% if item.is_color %}Color{% else %}B&W{% endif %}<br>
+                                        Binding: {% if item.needs_binding %}Yes{% else %}No{% endif %}
+                                        {% if item.color_pages_info %} ({{ item.color_pages_info }}){% endif %}
+                                    </td>
+                                    <td>₹ {{ item.item_estimated_cost }}</td>
+                                    <td>
+                                        <a href="{% url 'print_job_document' order.id item.id %}" 
+                                           class="btn-action btn-print {% if item.is_printed_by_admin %}btn-print-greyed{% endif %}"
+                                           {% if item.is_printed_by_admin %}style="pointer-events: none; opacity: 0.6;"{% endif %}
+                                           target="_blank">
+                                           Print Item
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="text-align: center; color: #666; font-style: italic;">No pending print orders at the moment.</p>
+        {% endif %}
+    </div>
+</body>
+</html>

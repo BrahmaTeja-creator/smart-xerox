@@ -1,0 +1,51 @@
+<!-- smartprint/templates/smartprint/print_viewer.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Print Document - SmartXerox</title>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
+        iframe { flex-grow: 1; border: none; width: 100%; height: 100%; }
+        .controls { text-align: center; padding: 10px; background-color: #f0f0f0; border-top: 1px solid #ddd; }
+        .controls button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+        .controls button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <iframe id="pdfViewer" src="{{ document_url }}" type="application/pdf"></iframe>
+
+    <div class="controls">
+        <button onclick="window.close()">Done Printing (Close Window)</button>
+    </div>
+
+    <script>
+        // Get the iframe element
+        const pdfViewer = document.getElementById('pdfViewer');
+
+        // Listen for when the iframe content has loaded
+        pdfViewer.onload = function() {
+            // Attempt to trigger the print dialog for the iframe content
+            // Note: Browser security policies might prevent direct printing of cross-origin iframes.
+            // For same-origin PDFs, this should work.
+            try {
+                pdfViewer.contentWindow.print();
+            } catch (e) {
+                console.error("Could not trigger print directly from iframe. Please use browser's print option.", e);
+                // Fallback: Trigger print for the main window if iframe print fails
+                window.print();
+            }
+        };
+    </script>
+</body>
+</html>
