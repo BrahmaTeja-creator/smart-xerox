@@ -5,3 +5,4 @@ __pycache__/
 *.log
 *.env
 db.sqlite3
+"print_documents/41632_*" 
