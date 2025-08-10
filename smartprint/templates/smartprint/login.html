@@ -1,15 +1,155 @@
+{% load custom_filters %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>Login - SmartXerox</title>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif; /* Using Inter font */
+            background-color: #e0e7ff; /* Lighter blue background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+            background-image: linear-gradient(to right top, #d16ba5, #c777b9, #ba83ca, #aa8fd8, #9a9ae1, #8aa7ec, #79b3f4, #69bff8, #52cffe, #41dfff, #46eefa, #5ffbf1); /* Subtle gradient */
+        }
+        .login-container {
+            background-color: #ffffff; /* Pure white for contrast */
+            padding: 40px; /* Increased padding */
+            border-radius: 15px; /* More rounded corners */
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2); /* More prominent shadow */
+            width: 100%;
+            max-width: 420px; /* Slightly wider */
+            text-align: center;
+            box-sizing: border-box; /* Ensure padding is included in width */
+        }
+        .logo {
+            margin-bottom: 25px;
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #007bff; /* Primary blue color */
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+        h2 {
+            color: #333;
+            margin-bottom: 30px; /* Increased margin */
+            font-size: 2.2em; /* Slightly larger heading */
+        }
+        .form-group {
+            margin-bottom: 25px; /* Increased margin */
+            text-align: left;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 10px; /* Increased margin */
+            font-weight: bold;
+            color: #444; /* Darker label color */
+            font-size: 1.05em;
+        }
+        .form-control {
+            width: calc(100% - 24px); /* Account for padding and border */
+            padding: 12px; /* Increased padding */
+            border: 1px solid #cce0ff; /* Lighter, subtle border */
+            border-radius: 8px; /* More rounded input fields */
+            font-size: 1em;
+            box-sizing: border-box;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .form-control:focus {
+            border-color: #007bff; /* Highlight on focus */
+            box-shadow: 0 0 0 3px rgba(0,123,255,0.25);
+            outline: none;
+        }
+        button {
+            width: 100%;
+            padding: 14px; /* Increased padding */
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 8px; /* More rounded button */
+            font-size: 1.2em; /* Larger font */
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            box-shadow: 0 4px 10px rgba(0,123,255,0.3); /* Button shadow */
+        }
+        button:hover {
+            background-color: #0056b3;
+            transform: translateY(-2px); /* Slight lift effect */
+        }
+        button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 5px rgba(0,123,255,0.3);
+        }
+        .errorlist {
+            color: #dc3545; /* Red for errors */
+            list-style-type: none;
+            padding: 0;
+            margin: -15px 0 20px 0; /* Adjusted margin */
+            text-align: left;
+            font-size: 0.95em;
+            font-weight: bold;
+        }
+        .messages {
+            list-style-type: none;
+            padding: 0;
+            margin-bottom: 20px;
+        }
+        .messages li {
+            background-color: #d4edda; /* Light green for success */
+            color: #155724; /* Dark green text */
+            border: 1px solid #c3e6cb;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 0.95em;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <h2>Login</h2>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">Login</button>
-    </form>
+    <div class="login-container">
+        <div class="logo">SmartXerox</div> {# Placeholder for your logo text or image #}
+        <h2>Login to Your Account</h2>
+        
+        {# Display non-field errors #}
+        {% if form.non_field_errors %}
+            <ul class="errorlist">
+                {% for error in form.non_field_errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
+        {# Display Django messages (e.g., from successful logout) #}
+        {% if messages %}
+            <ul class="messages">
+                {% for message in messages %}
+                    <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="{{ form.username.id_for_label }}">Username:</label>
+                {{ form.username|add_class:"form-control" }} {# Apply form-control class #}
+                {% if form.username.errors %}
+                    <ul class="errorlist">{% for error in form.username.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <label for="{{ form.password.id_for_label }}">Password:</label>
+                {{ form.password|add_class:"form-control" }} {# Apply form-control class #}
+                {% if form.password.errors %}
+                    <ul class="errorlist">{% for error in form.password.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                {% endif %}
+            </div>
+            <button type="submit">Login</button>
+        </form>
+    </div>
 </body>
 </html>

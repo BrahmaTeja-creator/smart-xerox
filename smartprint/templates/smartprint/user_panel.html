@@ -172,7 +172,7 @@
     </header>
     <main>
         <h2>Submit a New Print Request</h2>
-        <form id="print-order-form" method="post" enctype="multipart/form-data">
+        <form id="print-order-form" method="post" enctype="multipart/form-data" novalidate> {# ADDED novalidate HERE #}
             {% csrf_token %}
             
             {# Management form for the formset #}
@@ -206,6 +206,7 @@
                         <div class="form-group">
                             {{ form.document.label_tag }}
                             {{ form.document|add_class:"form-control" }}
+                            {# REMOVED required attribute from HTML here - Django's form handles it #}
                             {% if form.document.help_text %}
                                 <small class="form-text text-muted">{{ form.document.help_text }}</small>
                             {% endif %}
@@ -372,6 +373,9 @@
         const calculateCostAjaxUrl = "{% url 'calculate_cost_ajax' %}";
         const getPageCountAjaxUrl = "{% url 'get_page_count_ajax' %}";
 
+        // Store predefined document pages mapping from Django context
+        // Ensure this is always an object, even if predefined_doc_pages is empty or None
+        const predefinedDocPagesMap = {{ predefined_doc_pages|safe }} || {}; 
 
         // Function to clone a form and update its IDs/names
         function addForm(event) {
@@ -404,10 +408,13 @@
                     element.name = element.name.replace(/items-\d+-/, `items-${formIdx}-`);
                 }
                 // Clear values for new form and set defaults for numbers
-                if (element.type === 'text' || element.tagName === 'TEXTAREA' || element.tagName === 'SELECT') {
+                if (element.type === 'text' || element.tagName === 'TEXTAREA') {
                     element.value = '';
+                } else if (element.tagName === 'SELECT') {
+                    element.selectedIndex = 0; // Reset to default option
+                } else if (element.type === 'file') { // Handle file inputs
+                    element.value = ''; // Clear selected file
                 } else if (element.type === 'number') {
-                    // Set default for number inputs
                     if (element.name.includes('num_copies')) {
                         element.value = '1';
                     } else if (element.name.includes('total_pages')) {
@@ -451,7 +458,6 @@
             const formToRemoveId = event.target.dataset.formId;
             const formToRemove = document.getElementById(formToRemoveId);
             if (formToRemove) {
-                // Mark the DELETE checkbox for this form
                 const deleteCheckbox = formToRemove.querySelector('input[name$="-DELETE"]');
                 if (deleteCheckbox) {
                     deleteCheckbox.checked = true;
@@ -461,23 +467,47 @@
             }
         }
 
-        // NEW: Function to auto-detect pages from uploaded document
+        // Function to handle predefined document selection
+        function handlePredefinedDocChange(event) {
+            const predefinedDocSelect = event.target;
+            const formElement = predefinedDocSelect.closest('.item-form');
+            const totalPagesInput = formElement.querySelector('[id$="-total_pages"]');
+            const documentUploadInput = formElement.querySelector('[id$="-document"]');
+
+            const selectedDocId = predefinedDocSelect.value;
+            
+            // Clear the file input if a predefined document is selected
+            documentUploadInput.value = '';
+
+            if (selectedDocId && predefinedDocPagesMap[selectedDocId] !== undefined) {
+                totalPagesInput.value = predefinedDocPagesMap[selectedDocId];
+                totalPagesInput.disabled = false; // Ensure it's enabled
+            } else {
+                totalPagesInput.value = '0'; // Reset if no predefined doc selected or "Select a document"
+                totalPagesInput.disabled = false; // Ensure it's enabled
+            }
+            updateEstimatedCost(); // Recalculate cost
+        }
+
+
+        // Function to auto-detect pages from uploaded document
         function autoDetectPages(event) {
-            const documentUploadInput = event.target; // The specific file input that changed
-            const formElement = documentUploadInput.closest('.item-form'); // The parent form for this item
-            const totalPagesInput = formElement.querySelector('[id$="-total_pages"]'); // Get total pages input within this form
+            const documentUploadInput = event.target;
+            const formElement = documentUploadInput.closest('.item-form');
+            const totalPagesInput = formElement.querySelector('[id$="-total_pages"]');
+            const predefinedDocSelect = formElement.querySelector('[id$="-predefined_document"]');
 
             if (documentUploadInput.files.length > 0) {
+                predefinedDocSelect.selectedIndex = 0; // Clear predefined selection
                 const file = documentUploadInput.files[0];
                 const formData = new FormData();
                 formData.append('document', file);
                 formData.append('csrfmiddlewaretoken', csrftoken);
 
-                // Disable total pages input while detecting
                 totalPagesInput.value = 'Detecting...';
                 totalPagesInput.disabled = true;
 
-                fetch(getPageCountAjaxUrl, { // Use the defined URL variable
+                fetch(getPageCountAjaxUrl, {
                     method: 'POST',
                     body: formData,
                     headers: {
@@ -485,7 +515,7 @@
                     }
                 })
                 .then(response => {
-                    if (!response.ok) { // Check for HTTP errors
+                    if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
                     return response.json();
@@ -503,11 +533,11 @@
                     console.error('Network error or server issue for page detection:', error);
                 })
                 .finally(() => {
-                    totalPagesInput.disabled = false; // Re-enable input
-                    updateEstimatedCost(); // Recalculate cost after pages are detected
+                    totalPagesInput.disabled = false;
+                    updateEstimatedCost();
                 });
             } else {
-                totalPagesInput.value = '0'; // Reset if no file selected
+                totalPagesInput.value = '0';
                 updateEstimatedCost();
             }
         }
@@ -521,9 +551,8 @@
             const isColorCheckbox = formElement.querySelector('[id$="-is_color"]');
             const needsBindingCheckbox = formElement.querySelector('[id$="-needs_binding"]');
 
-            if (predefinedDocSelect) predefinedDocSelect.addEventListener('change', updateEstimatedCost);
-            // Attach autoDetectPages to the document upload input
-            if (documentUploadInput) documentUploadInput.addEventListener('change', autoDetectPages); // NEW: Auto-detect pages
+            if (predefinedDocSelect) predefinedDocSelect.addEventListener('change', handlePredefinedDocChange);
+            if (documentUploadInput) documentUploadInput.addEventListener('change', autoDetectPages);
             
             if (totalPagesInput) totalPagesInput.addEventListener('input', updateEstimatedCost);
             if (numCopiesInput) numCopiesInput.addEventListener('input', updateEstimatedCost); 
@@ -533,10 +562,24 @@
 
         // Function to send AJAX request and update total order cost
         function updateEstimatedCost() {
-            const formData = new FormData(printOrderForm); // Use the main form to get all data
+            const formData = new FormData(printOrderForm);
             formData.append('csrfmiddlewaretoken', csrftoken);
 
-            fetch(calculateCostAjaxUrl, { // Use the defined URL variable
+            formContainer.querySelectorAll('.item-form').forEach((formElement, index) => {
+                const isColorCheckbox = formElement.querySelector(`[name="items-${index}-is_color"]`);
+                const needsBindingCheckbox = formElement.querySelector(`[name="items-${index}-needs_binding"]`);
+
+                // Use 'set' to ensure the value is always explicitly added, even if unchecked
+                if (isColorCheckbox) {
+                    formData.set(`items-${index}-is_color`, isColorCheckbox.checked ? 'true' : 'false');
+                }
+                if (needsBindingCheckbox) {
+                    formData.set(`items-${index}-needs_binding`, needsBindingCheckbox.checked ? 'true' : 'false');
+                }
+            });
+
+
+            fetch(calculateCostAjaxUrl, {
                 method: 'POST',
                 body: formData,
                 headers: {
@@ -544,7 +587,7 @@
                 }
             })
             .then(response => {
-                if (!response.ok) { // Check for HTTP errors
+                if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 return response.json();
@@ -566,7 +609,6 @@
         // Attach event listeners to initial forms on page load
         formContainer.querySelectorAll('.item-form').forEach(formElement => {
             attachEventListenersToForm(formElement);
-            // Attach remove listener for existing remove buttons (if any, for pre-filled forms)
             const removeBtn = formElement.querySelector('.remove-item-btn');
             if (removeBtn) {
                 removeBtn.addEventListener('click', removeForm);

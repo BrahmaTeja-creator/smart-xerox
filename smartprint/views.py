@@ -8,6 +8,7 @@ from django.db.models import Sum
 from django.views.decorators.http import require_POST
 from .models import PrintJob, PriceSetting, PredefinedDocument, PrintOrder, User
 from .forms import PrintJobItemForm, PrintJobItemFormset
+import json # Import json for JSON serialization
 
 # Import PyMuPDF for PDF page counting
 try:
@@ -19,16 +20,29 @@ except ImportError:
     print("Warning: PyMuPDF (fitz) not installed. PDF page counting will not work.")
 
 
+# Helper function to check if a user is an admin (superuser)
+def is_admin(user):
+    """Checks if the user is authenticated and is a superuser."""
+    return user.is_authenticated and user.is_superuser
+
+
 # Helper function to calculate the cost of a print job item
 def calculate_item_cost(item_data, price_settings):
     """
     Calculates the estimated cost of a single PrintJob item.
-    item_data is a dictionary from form.cleaned_data or a PrintJob instance.
+    item_data is a dictionary (from AJAX) or a PrintJob instance (from form submission).
     """
+    # Safely get values, converting to int/bool. Use .get() with defaults for dicts.
+    # For PrintJob instances, access attributes directly.
     num_copies = int(item_data.get('num_copies', 1)) if isinstance(item_data, dict) else int(item_data.num_copies)
     total_pages = int(item_data.get('total_pages', 0)) if isinstance(item_data, dict) else int(item_data.total_pages)
-    is_color = item_data.get('is_color', False) if isinstance(item_data, dict) else item_data.is_color
-    needs_binding = item_data.get('needs_binding', False) if isinstance(item_data, dict) else item_data.needs_binding
+    
+    # Checkbox values from JS FormData are 'true' or 'false' strings, convert to Python bool
+    is_color_str = item_data.get('is_color', 'false') if isinstance(item_data, dict) else str(item_data.is_color).lower()
+    is_color = is_color_str == 'true'
+
+    needs_binding_str = item_data.get('needs_binding', 'false') if isinstance(item_data, dict) else str(item_data.needs_binding).lower()
+    needs_binding = needs_binding_str == 'true'
 
     # Ensure numeric types are valid
     if num_copies < 1: num_copies = 1
@@ -122,14 +136,18 @@ def user_panel(request):
             print_order.total_estimated_cost = total_order_cost
             print_order.save()
 
-            return redirect('user_panel')
+            # Redirect to the success page after submission
+            return redirect('order_success') 
         else:
-            # Formset is not valid, it will be re-rendered with errors
-            pass
+            pass # Form will be re-rendered with errors
     else:
         formset = PrintJobItemFormset(prefix='items') # Create an empty formset for GET requests
 
     predefined_docs = PredefinedDocument.objects.all()
+    # Ensure predefined_doc_pages is always a dictionary, even if no predefined docs exist
+    # Convert QuerySet to a dict and then to JSON string
+    predefined_doc_pages_map = {str(doc.id): doc.total_pages for doc in predefined_docs} # Convert ID to string key
+    predefined_doc_pages_json = json.dumps(predefined_doc_pages_map)
     
     # Fetch current user's print orders for display
     user_print_orders = PrintOrder.objects.filter(user=request.user).order_by('-requested_at')
@@ -137,11 +155,16 @@ def user_panel(request):
     context = {
         'formset': formset, # Pass the formset to the template
         'predefined_docs': predefined_docs,
+        'predefined_doc_pages': predefined_doc_pages_json, # Pass the JSON string here
         'user': request.user,
         'user_print_orders': user_print_orders,
         'price_settings': price_settings,
     }
     return render(request, 'smartprint/user_panel.html', context)
+
+def order_success(request): # This is the order_success view
+    """Renders a success page after an order is placed."""
+    return render(request, 'smartprint/order_success.html')
 
 @require_POST # Ensures this view only accepts POST requests
 def calculate_cost_ajax(request):
@@ -158,6 +181,7 @@ def calculate_cost_ajax(request):
         total_order_cost = 0
         
         # Determine the number of forms submitted via AJAX
+        # Use TOTAL_FORMS from the formset management data
         total_forms = int(request.POST.get('items-TOTAL_FORMS', 0))
 
         for i in range(total_forms):
@@ -167,10 +191,10 @@ def calculate_cost_ajax(request):
 
             # Extract data for each item, providing default values for numbers
             item_data_for_calc = {
-                'num_copies': int(request.POST.get(f'items-{i}-num_copies') or 1), # Default to 1 if empty
-                'total_pages': int(request.POST.get(f'items-{i}-total_pages') or 0), # Default to 0 if empty
-                'is_color': request.POST.get(f'items-{i}-is_color') == 'true',
-                'needs_binding': request.POST.get(f'items-{i}-needs_binding') == 'true',
+                'num_copies': request.POST.get(f'items-{i}-num_copies') or '1', # Default to '1' string
+                'total_pages': request.POST.get(f'items-{i}-total_pages') or '0', # Default to '0' string
+                'is_color': request.POST.get(f'items-{i}-is_color') or 'false', # Default to 'false' string
+                'needs_binding': request.POST.get(f'items-{i}-needs_binding') or 'false', # Default to 'false' string
             }
             
             # Calculate cost for this item and add to total order cost
@@ -218,11 +242,6 @@ def get_page_count_ajax(request):
 #               Admin-Facing Views
 # ----------------------------------------------------
 
-# Helper function to check if a user is an admin (superuser)
-def is_admin(user):
-    """Checks if the user is authenticated and is a superuser."""
-    return user.is_authenticated and user.is_superuser
-
 @user_passes_test(is_admin)
 def admin_dashboard(request):
     """
@@ -257,6 +276,33 @@ def admin_dashboard(request):
     }
     return render(request, 'smartprint/admin_dashboard.html', context)
 
+@user_passes_test(is_admin)
+def admin_profile(request):
+    """
+    Renders the admin profile and analytics page.
+    Displays earnings and other detailed statistics.
+    """
+    # Fetch data for analytics here
+    total_earnings_all_time = PrintOrder.objects.filter(
+        payment_status__in=['FULL_PAID', 'ADVANCE_PAID']
+    ).aggregate(total=Sum('total_estimated_cost'))['total'] or 0
+
+    total_pages_all_time = PrintOrder.objects.filter(
+        status='COMPLETED'
+    ).aggregate(total=Sum('items__total_pages'))['total'] or 0
+    
+    # You can add more detailed analytics here, e.g.,
+    # orders_by_status = PrintOrder.objects.values('status').annotate(count=Count('id'))
+    # popular_predefined_docs = PredefinedDocument.objects.annotate(num_uses=Count('printjob__id')).order_by('-num_uses')[:5]
+
+    context = {
+        'total_earnings_all_time': total_earnings_all_time,
+        'total_pages_all_time': total_pages_all_time,
+        'user': request.user, # Pass current user info
+        # 'orders_by_status': orders_by_status,
+    }
+    return render(request, 'smartprint/admin_profile.html', context)
+
 
 @user_passes_test(is_admin)
 def approve_order(request, order_id): # Changed to approve_order
@@ -272,6 +318,23 @@ def reject_order(request, order_id): # Changed to reject_order
     """Updates an order's status to 'REJECTED'."""
     order = get_object_or_404(PrintOrder, pk=order_id)
     order.status = 'REJECTED'
+    order.save()
+    return redirect('admin_dashboard')
+
+@user_passes_test(is_admin)
+def complete_order(request, order_id):
+    """Updates an order's status to 'COMPLETED'."""
+    order = get_object_or_404(PrintOrder, pk=order_id)
+    order.status = 'COMPLETED'
+    order.completed_at = timezone.now() # Set completion timestamp
+    order.save()
+    return redirect('admin_dashboard')
+
+@user_passes_test(is_admin)
+def mark_as_paid_order(request, order_id):
+    """Updates an order's payment_status to 'FULL_PAID'."""
+    order = get_object_or_404(PrintOrder, pk=order_id)
+    order.payment_status = 'FULL_PAID' # Or 'ADVANCE_PAID' if you want to differentiate
     order.save()
     return redirect('admin_dashboard')
 

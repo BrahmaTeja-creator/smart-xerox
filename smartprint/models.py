@@ -3,6 +3,16 @@
 from django.db import models
 from django.contrib.auth.models import User
 
+# Import PyMuPDF for PDF page counting in models
+try:
+    import fitz # PyMuPDF
+    from django.core.files.storage import default_storage
+    from django.core.files.base import ContentFile
+except ImportError:
+    fitz = None
+    print("Warning: PyMuPDF (fitz) not installed. PDF page counting in models will not work.")
+
+
 # This model stores the global pricing information, editable by the admin.
 class PriceSetting(models.Model):
     price_per_bw_page = models.DecimalField(max_digits=5, decimal_places=2, default=1.00)
@@ -50,23 +60,19 @@ class PrintOrder(models.Model):
 
 
 # This model represents a single document (item) within a PrintOrder.
-# The previous PrintJob will now conceptually be a PrintJobItem.
-class PrintJob(models.Model): # Keeping class name as PrintJob for simpler migration path, but it's an "item"
-    order = models.ForeignKey(PrintOrder, on_delete=models.CASCADE, related_name='items') # Link to the parent order
+class PrintJob(models.Model):
+    order = models.ForeignKey(PrintOrder, on_delete=models.CASCADE, related_name='items')
     document = models.FileField(upload_to='print_documents/')
-    total_pages = models.IntegerField(default=0) # Number of pages/images in this specific document
-    num_copies = models.IntegerField(default=1) # Copies of THIS specific document
+    total_pages = models.IntegerField(default=0)
+    num_copies = models.IntegerField(default=1)
     
-    # Customization for THIS document
-    is_color = models.BooleanField(default=False) # True if color, False if B&W
-    # Keeping color_pages_info for more granular control if needed, but is_color is simpler for now
+    is_color = models.BooleanField(default=False)
     color_pages_info = models.TextField(blank=True, null=True) 
     needs_binding = models.BooleanField(default=False)
 
-    # Cost of this specific item (document)
     item_estimated_cost = models.DecimalField(max_digits=7, decimal_places=2, default=0.00) 
     
-    is_printed_by_admin = models.BooleanField(default=False) # Tracks if this specific document has been printed
+    is_printed_by_admin = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Item {self.id} for Order {self.order.id}: {self.document.name.split('/')[-1]}"
@@ -76,9 +82,27 @@ class PrintJob(models.Model): # Keeping class name as PrintJob for simpler migra
 class PredefinedDocument(models.Model):
     title = models.CharField(max_length=255)
     document_file = models.FileField(upload_to='predefined_documents/')
-    total_pages = models.IntegerField(default=0) # Store page count for predefined docs
+    total_pages = models.IntegerField(default=0) # Field to store page count
     uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.title
+
+    # Override save method to automatically count pages
+    def save(self, *args, **kwargs):
+        if self.document_file and fitz: # Ensure a file is uploaded and PyMuPDF is available
+            # If the file has changed or pages are not set, try to count
+            if not self.pk or self.document_file != PredefinedDocument.objects.get(pk=self.pk).document_file:
+                try:
+                    # Open the file directly from Django's FileField
+                    doc = fitz.open(stream=self.document_file.read(), filetype="pdf") # Use stream for in-memory file
+                    self.total_pages = doc.page_count
+                    doc.close()
+                    # Reset file pointer after reading for Django to save it correctly
+                    self.document_file.seek(0) 
+                except Exception as e:
+                    print(f"Error counting pages for predefined document {self.title}: {e}")
+                    self.total_pages = 0 # Default to 0 if error
+        super().save(*args, **kwargs) # Call the original save method
+

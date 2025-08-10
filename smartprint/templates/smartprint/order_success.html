@@ -1,0 +1,74 @@
+<!-- smartprint/templates/smartprint/order_success.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Order Placed Successfully!</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+            flex-direction: column;
+        }
+        .success-container {
+            background-color: #fff;
+            padding: 50px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+        }
+        .tick-mark {
+            font-size: 5em;
+            color: #28a745; /* Green color */
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+        p {
+            color: #555;
+            font-size: 1.1em;
+            margin-bottom: 25px;
+        }
+        .redirect-text {
+            font-size: 0.9em;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="success-container">
+        <div class="tick-mark">&#10004;</div> {# Unicode tick mark #}
+        <h1>Order Placed Successfully!</h1>
+        <p>Your print order has been received and is being processed.</p>
+        <p class="redirect-text">Redirecting to your dashboard in <span id="countdown">3</span> seconds...</p>
+    </div>
+
+    <script>
+        let countdown = 3;
+        const countdownElement = document.getElementById('countdown');
+        const redirectUrl = "{% url 'user_panel' %}"; // URL to redirect to
+
+        function updateCountdown() {
+            countdown--;
+            countdownElement.textContent = countdown;
+            if (countdown <= 0) {
+                window.location.href = redirectUrl; // Redirect
+            } else {
+                setTimeout(updateCountdown, 1000); // Call again after 1 second
+            }
+        }
+
+        setTimeout(updateCountdown, 1000); // Start countdown after 1 second
+    </script>
+</body>
+</html>
